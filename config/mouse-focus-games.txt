@@ -1,0 +1,10 @@
+# One regex per line. Matched case-insensitively against window title + process cmdline.
+# Add games you want to auto-disable mouse emulation/scroll for.
+
+FINAL FANTASY XIV
+ffxiv_dx11
+Star Citizen
+StarCitizen
+Cyberpunk 2077
+Cyberpunk
+Cyberpunk2077.exe

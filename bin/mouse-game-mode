@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# CLI for KDE Plasma mouse game/desktop mode toggling.
+#   mouse-game-mode list              — show detected mice + current settings
+#   mouse-game-mode desktop           — enable L+R middle + hold-middle scroll
+#   mouse-game-mode game              — disable both (for gaming)
+#   mouse-game-mode watch <pattern>   — toggle while process matches (Ctrl+C to stop)
+
+set -euo pipefail
+
+LIB="${HOME}/.local/lib/mouse-game-mode.sh"
+# shellcheck source=/dev/null
+source "$LIB"
+
+cmd="${1:-}"
+shift || true
+
+case "$cmd" in
+    list)
+        mgm_describe_devices
+        ;;
+    desktop)
+        mgm_set_desktop_mode
+        echo "Desktop mode: scrollOnButtonDown + middleEmulation enabled (hold-middle and L+R for scroll). Globals enabled."
+        ;;
+    game)
+        mgm_set_game_mode
+        echo "Game mode: scrollOnButtonDown + middleEmulation disabled. Globals off."
+        ;;
+    reset|safe)
+        mgm_reset_safe
+        echo "Safe mode: desktop scroll + middle emulation on (L+R and hold-middle enabled)"
+        ;;
+    watch)
+        pattern="${1:?Usage: mouse-game-mode watch <process-pattern>}"
+        mgm_ensure_desktop_if_idle "$pattern"
+        mgm_install_restore_trap
+        mgm_start_game_watcher "$pattern"
+        echo "Watching for '$pattern' — Ctrl+C to stop"
+        wait "$MGM_WATCHER_PID"
+        ;;
+    stop)
+        mgm_stop_all_watchers
+        mgm_set_desktop_mode
+        echo "Watchers stopped. Desktop mode restored."
+        ;;
+    focus|watch-focus)
+        shift || true
+        FOCUS_SCRIPT="${HOME}/.local/bin/mouse-focus-watchdog.sh"
+        if [[ -x "$FOCUS_SCRIPT" ]]; then
+            echo "Starting focus-based watchdog (Ctrl-C to stop, will force desktop on exit)..."
+            exec "$FOCUS_SCRIPT" "$@"
+        else
+            echo "Focus watchdog not found at $FOCUS_SCRIPT. Run install.sh first."
+            exit 1
+        fi
+        ;;
+    *)
+        cat <<'EOF'
+Usage:
+  mouse-game-mode list
+  mouse-game-mode desktop
+  mouse-game-mode game
+  mouse-game-mode reset
+  mouse-game-mode stop          # kill watchers + restore desktop
+  mouse-game-mode watch <process-pattern>
+  mouse-game-mode focus [patterns...]   # or watch-focus
+                              # Focus-aware: game mode ONLY while game window is active/focused.
+                              # Alt-tab → desktop mode automatically.
+
+Steam launch options (examples):
+  ~/.local/bin/mouse-game-fix.sh %command%
+  ~/.local/bin/mouse-game-fix-nvidia.sh %command%
+
+Note: Desktop enables both scrollOnButtonDown (hold middle) and middleEmulation (L+R) on device + globals.
+Game disables both.
+Use for actual game windows (not launchers). The focus watchdog auto-switches on tab.
+See README for full installation and integration.
+EOF
+        exit 1
+        ;;
+esac

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Mouse Desktop Mode
+Exec=sh -c "sleep 10; $HOME/.local/bin/mouse-game-mode desktop"
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+Comment=Apply desktop mouse settings (L+R emulation + scroll) on login after delay
