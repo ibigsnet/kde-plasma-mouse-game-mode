@@ -1,4 +1,5 @@
 # One regex per line. Matched case-insensitively against window title + process cmdline.
+# For tabbing workflows, include both game titles and any proxy/bridge names used in HDR/gamescope.
 # Add games you want to auto-disable mouse emulation/scroll for.
 
 FINAL FANTASY XIV

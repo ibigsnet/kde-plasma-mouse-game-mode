@@ -1,12 +1,21 @@
 #!/usr/bin/env bash
+#
+# KDE Plasma Mouse Game Mode - Core Library
+#
+# This is free and open source software.
+# Feel free to read, edit, improve, fork, and redistribute these scripts.
+# Contributions and modifications are encouraged!
+#
 # Shared KDE Plasma mouse game-mode helpers.
 # Toggles scrollOnButtonDown (hold middle button scrolls) and middleEmulation (L+R emulates middle click).
 # Desktop mode: both enabled for normal scrolling (L+R and hold-middle).
 # Game mode: both disabled (prevents unwanted scroll/middle emulation in games).
 #
-# Supports process-based watchers (tied to exe) and focus-based auto switching (window focus).
-# Works on Wayland with KWin. Tested primarily with Corsair mice but extensible to others.
-# Ideal for games like Star Citizen, FFXIV, etc. — disable in-game, enable on desktop.
+# Supports two watcher styles:
+#   - Focus-based (mouse-focus-watchdog): switches on window focus. Perfect for alt-tabbing in/out.
+#   - Process-based (mgm_start_game_watcher): tied to exe lifetime. Good for launch/close.
+# Works on Wayland with KWin. Tested primarily with Corsair mice but extensible.
+# Ideal for games like Star Citizen, FFXIV, etc. — disable emulation/scroll while in game.
 
 MGM_QDBUS="${MGM_QDBUS:-$(command -v qdbus6 2>/dev/null || command -v qdbus)}"
 MGM_LOGFILE="${MGM_LOGFILE:-/tmp/mouse-game-mode.log}"

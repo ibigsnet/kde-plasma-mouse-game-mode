@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
+#
+# This script is free and open source software.
+# Please feel free to edit, improve, and adapt it!
+#
 # mouse-focus-watchdog.sh
 # Focus-based mouse mode switcher for KDE Plasma.
-# Only "game mode" (scroll disabled) when a game window is focused.
-# Desktop mode otherwise (scrolling/L+R emulation restored).
 #
-# Run via: mouse-game-mode focus
-# Matches window title + cmdline against ~/.config/mouse-focus-games.txt
-# Works with alt-tabbing. See README.
+# Primary use case: tabbing in and out of games.
+# - Game window focused → GAME MODE (middle emulation + hold-middle scroll disabled)
+# - Alt-tab out to desktop/other windows → DESKTOP MODE (scrolling restored)
+#
+# Run with: mouse-game-mode focus
+# Matches active/top window title + cmdline against ~/.config/mouse-focus-games.txt
+# See README.md for setup steps, HDR notes, and comparison to process watchers.
 
 set -euo pipefail
 

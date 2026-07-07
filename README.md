@@ -1,5 +1,9 @@
 # KDE Plasma Mouse Game Mode
 
+**Free & Open Source Software**
+
+This project uses the MIT license. You are encouraged to read the code, modify it for your needs, fork it, and contribute improvements.
+
 Automatically disable middle mouse button emulation and "hold middle to scroll" when playing games on KDE Plasma (Wayland), and re-enable it for normal desktop use.
 
 This prevents games from receiving unwanted middle clicks or scroll events from L+R or middle-hold, while keeping the convenient behavior on the desktop.
@@ -17,14 +21,14 @@ This prevents games from receiving unwanted middle clicks or scroll events from 
 
 Switching can be:
 - Manual via `mouse-game-mode desktop` / `game`
-- Automatic via focus watcher (recommended for alt-tabbing)
-- Automatic via process watcher (tied to specific game exe, used in launchers)
+- Automatic via **focus watcher** (recommended for alt-tabbing in/out of games)
+- Automatic via **process watcher** (tied to game exe running, best for launch/close)
 
 ## Features
 
 - Works on KDE Plasma Wayland + KWin (qdbus control + kcminputrc persistence).
-- Focus watcher: switches based on active window title + process cmdline. Alt-tab out of game → desktop scrolling restored.
-- Process watcher: for launchers (e.g. only real `StarCitizen.exe`, not RSI Launcher).
+- Focus watcher: switches based on active window title + process cmdline. Ideal for alt-tabbing: leave the game → scrolling restored; tab back in → disabled.
+- Process watcher: for launchers (e.g. only real `StarCitizen.exe`, not RSI Launcher). Stays in game mode while exe runs, even if alt-tabbed out.
 - Per-device + global settings persisted.
 - Easy wrappers for Steam launch options.
 - Emergency reset script.
@@ -57,7 +61,7 @@ mouse-game-mode list
 mouse-game-mode desktop
 ```
 
-To start the focus watcher (for alt-tab behavior):
+To start the focus watcher (recommended for tabbing in/out of games):
 
 ```bash
 mouse-game-mode focus
@@ -75,7 +79,7 @@ An autostart `.desktop` is provided (runs after delay on login to force safe des
 mouse-game-mode list                 # current state
 mouse-game-mode desktop              # enable scrolling/emulation
 mouse-game-mode game                 # disable for gaming
-mouse-game-mode focus                # start focus auto-switcher (Ctrl-C to stop)
+mouse-game-mode focus                # start focus watcher (best for alt-tabbing in/out)
 mouse-game-mode stop                 # kill watchers + force desktop
 mouse-game-mode watch 'SomeGame.exe' # simple process watcher (advanced)
 ```
@@ -94,20 +98,84 @@ The wrapper calls `mgm_run_with_game_mode ...` which sets game mode, runs your c
 
 ## Automatic switching
 
-### Focus watcher (best for alt-tab)
+### Focus watcher — Recommended for tabbing in and out of games
 
-`mouse-game-mode focus`
+The focus watcher is designed specifically for the "tabbing in/out" use case (rather than full launch/close).
 
-- Detects the focused window using KWin stacking + wmctrl + process cmdline.
-- Matches patterns in `~/.config/mouse-focus-games.txt` (case-insensitive regex on title + cmdline).
-- Game focused → game mode.
-- Alt-tab / switch away → desktop mode.
+**Steps to set up tab-in / tab-out behavior:**
 
-**Note for complex setups (HDR, gamescope, Wine):** The "visible" window may be a bridge/proxy (e.g. "Xwayland Video Bridge"). The focus script falls back to cmdline checks. You may need to add patterns or improve detection (see `is_game_focused` in the script).
+1. Make sure the project is installed (`./install.sh`).
+2. Edit your game patterns:
+   ```bash
+   nano ~/.config/mouse-focus-games.txt
+   ```
+   Add titles/cmdlines for your games (one per line, regex supported):
+   ```
+   Star Citizen
+   StarCitizen
+   FINAL FANTASY XIV
+   ffxiv_dx11
+   ```
+3. Start the focus watcher (run this in a terminal or background it):
+   ```bash
+   mouse-game-mode focus
+   ```
+   - It stops any conflicting process watchers.
+   - On start it checks current focus and sets the correct mode.
+   - While running: 
+     - Game window focused (or top of stack) → **GAME mode** (L+R and hold-middle scroll **disabled**).
+     - Alt-tab / switch to desktop, browser, Discord, etc. → **DESKTOP mode** (scrolling **enabled**).
+   - Logs go to `/tmp/mouse-focus-watchdog.log`. Watch them:
+     ```bash
+     tail -f /tmp/mouse-focus-watchdog.log
+     ```
+4. Verify while tabbing:
+   ```bash
+   mouse-game-mode list
+   ```
+   Tab in/out of the game and watch the output change.
 
-### Process watchers in launchers
+5. To run persistently:
+   - Run in a terminal you keep open.
+   - Or start from a script and background it: `mouse-game-mode focus & disown`
+   - Or create your own autostart `.desktop` that launches it (similar to the provided desktop-mode one).
+   - On exit (Ctrl-C or logout) it automatically forces desktop mode.
 
-Used in custom game launch scripts (see examples). While the matching exe is running → game mode. Good for distinguishing launcher vs actual game.
+**How it works internally:**
+- Polls KWin's `_NET_CLIENT_LIST_STACKING` + `_NET_ACTIVE_WINDOW`.
+- Gets the window's title + process cmdline.
+- Matches against your patterns.
+- Only changes mode when focus state actually changes (debounced).
+
+**HDR / Gamescope / Wine caveats:**
+The "game" window is often a proxy ("Wayland to X Recording bridge", "Xwayland Video Bridge", etc.). The script uses both title *and* cmdline of the reported pid, plus numeric ID matching. If detection is flaky:
+- Add bridge-related patterns temporarily.
+- Or run `wmctrl -l -p` and `xprop -root _NET_ACTIVE_WINDOW` while in-game to see what titles/pids are reported.
+- Improve `is_game_focused()` in `bin/mouse-focus-watchdog.sh` if needed (it already handles some stacking edge cases).
+
+### Process watchers — Better for launch/close
+
+Used when you want mode tied to the game *process* being alive (not just focused).
+
+Example from launch scripts:
+```bash
+source "${HOME}/.local/lib/mouse-game-mode.sh"
+mgm_set_desktop_mode                    # launcher phase
+mgm_start_game_watcher 'StarCitizen\.exe'  # actual game
+# ... launch command ...
+```
+
+- While the matching exe runs → game mode (even if you alt-tab out).
+- When exe disappears for a few seconds (debounce) → desktop mode.
+- Good for launchers that stay running after the game starts, or when you want strict "game is running" logic.
+- Launch via `mouse-game-mode watch 'pattern'` for testing.
+
+**When to choose which?**
+- Frequent alt-tabbing (desktop + game): Use **focus watcher**.
+- Mostly launch game, play full session, then close: Process watcher or launch wrappers are fine.
+- Both: You can start the focus watcher after launching (it will stop process watchers).
+
+The CLI help and examples show both approaches.
 
 ## Configuration
 
@@ -152,23 +220,41 @@ your-launcher
 - After reboot or manual changes in System Settings, run `mouse-game-mode desktop`.
 - `mouse-game-mode list` shows live KWin state vs what kcminputrc has.
 - In HDR/gamescope the window titles/pids can be weird (bridge). Use `wmctrl -l`, `xprop`, and logs.
-- Focus watcher not detecting your game? Add to patterns or temporarily use `mouse-game-mode game` manually.
+- Focus watcher not detecting your game when tabbing? Add patterns (including bridge names for HDR), check with `wmctrl -l -p` while focused, or look at `/tmp/mouse-focus-watchdog.log`. You can also run `mouse-game-mode game` manually right after tabbing in.
 - Clicks broken? `mouse-emergency-reset.sh` or `mouse-game-mode desktop`.
 - Multiple mice? The scripts target discovered pointer devices (currently Corsair-filtered in discovery; easy to generalize).
 - Logs: `/tmp/mouse-game-mode.log`, `/tmp/mouse-focus-watchdog.log`
 
 ## Expected Behavior
 
-- Normal desktop/apps: scrolling via L+R and hold-middle works.
-- In supported games: no interference.
-- Alt-tabbing with focus watcher active: scrolling comes back when you leave the game window.
-- Launch via provided wrappers/launchers: correct mode for the phase of the game.
+- Normal desktop or alt-tabbed out of a game (focus watcher running): L+R middle emulation + hold-middle scroll are **enabled**.
+- Game window focused (focus watcher running): both features **disabled** — games get clean input.
+- With process watcher / launch wrappers: mode follows the exe lifetime (game mode while running, regardless of focus).
+- After reboot or manual System Settings changes: run `mouse-game-mode desktop` to reset.
 
-## Contributing / Customization
+## Contributing & Modifications
 
-The core logic lives in `lib/mouse-game-mode.sh`. The discovery function, set routines, and watchers are all there.
+This project is **free and open source**. We actively encourage you to:
 
-Feel free to fork, improve focus detection for more games, add support for non-Corsair mice, etc.
+- Fork the repository
+- Edit, improve, and customize the scripts for your setup
+- Add support for new games, mice, or desktop environments
+- Fix bugs or improve HDR/gamescope/Wine detection
+- Share your changes via pull requests
+
+The core logic lives in `lib/mouse-game-mode.sh`. The discovery function, set routines, watchers, and focus logic are all designed to be easy to understand and modify.
+
+### How to contribute
+1. Fork the repo on GitHub.
+2. Make your changes (most people start by tweaking patterns or the `is_game_focused` function).
+3. Test with `mouse-game-mode list` and the focus watcher.
+4. Open a Pull Request.
+
+Even small improvements (better comments, new game patterns, clearer docs) are welcome.
+
+See `CONTRIBUTING.md` for more details.
+
+No contribution is too small — this project exists to help the community avoid middle-mouse annoyances in games.
 
 ## Credits
 
@@ -176,4 +262,16 @@ Extracted and cleaned from a working personal setup for Star Citizen + FFXIV on 
 
 ## License
 
-MIT
+This project is licensed under the **MIT License** (a permissive free and open source license).
+
+You are free to:
+- Use the software for any purpose
+- Modify the source code
+- Distribute copies (modified or not)
+- Use it in proprietary projects
+
+See the [LICENSE](LICENSE) file for the full text.
+
+We chose a free and open license specifically so that people can easily edit, adapt, and improve the tools for their own games and setups.
+
+Contributions and modifications are very welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).

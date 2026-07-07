@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+#
+# This script is free and open source.
+# You are welcome (and encouraged) to modify it for your needs.
+#
 # CLI for KDE Plasma mouse game/desktop mode toggling.
 #   mouse-game-mode list              — show detected mice + current settings
 #   mouse-game-mode desktop           — enable L+R middle + hold-middle scroll
@@ -64,8 +68,8 @@ Usage:
   mouse-game-mode stop          # kill watchers + restore desktop
   mouse-game-mode watch <process-pattern>
   mouse-game-mode focus [patterns...]   # or watch-focus
-                              # Focus-aware: game mode ONLY while game window is active/focused.
-                              # Alt-tab → desktop mode automatically.
+                              # Focus watcher: game mode while game window is focused.
+                              # Alt-tab out → desktop mode (scrolling enabled) automatically.
 
 Steam launch options (examples):
   ~/.local/bin/mouse-game-fix.sh %command%

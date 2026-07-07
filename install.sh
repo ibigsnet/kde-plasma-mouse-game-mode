@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+#
+# This project uses a free and open source license.
+# You are encouraged to read, modify, and improve these scripts.
+#
 # Installer for KDE Plasma Mouse Game Mode
 # Run: ./install.sh
 
