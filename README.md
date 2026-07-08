@@ -217,11 +217,57 @@ your-launcher
 
 ## Troubleshooting
 
+### Stuck in "middle mousing" / normal clicks not registering
+
+**Symptoms:**
+- L+R (or holding middle) still scrolls, but standalone left/right clicks do nothing or behave strangely.
+- Feels like the mouse is "stuck" emulating middle button (as if you were holding middle when the mode switched).
+- Happens intermittently, especially around game launch/exit or alt-tab while buttons were pressed.
+
+**Root cause:**
+The libinput middle-button state machine (used by KWin for `middleEmulation` and `scrollOnButtonDown`) gets desynced. When we toggle the properties while you have L+R or middle held, or right at the moment a game launches/exits (common with gamescope + HDR proxies), libinput ends up in an invalid state (e.g. "MIDDLEBUTTON_IDLE" but still receiving button events). Normal clicks get dropped; only the scroll path remains partially active.
+
+This is a known fragile interaction when dynamically toggling these features in complex Wayland setups.
+
+**Robust recovery (no reboot required):**
+
+1. Run the dedicated stuck-state fixer:
+   ```bash
+   ~/.local/bin/mouse-fix-stuck-state.sh
+   ```
+
+2. If clicks are still weird:
+   ```bash
+   ~/.local/bin/mouse-emergency-reset.sh
+   pkill -x gamescope 2>/dev/null || true
+   ```
+
+3. **Unplug/replug the mouse USB** (this re-enumerates the device and clears libinput state). Then run `mouse-game-mode desktop`.
+
+4. Verify:
+   ```bash
+   mouse-game-mode list
+   ```
+
+The `mouse-fix-stuck-state.sh` script does a full cycle (disable → device reset → ydotool button releases → re-enable) which directly attacks the stuck state.
+
+**Prevention (what we added to make it more robust):**
+- Every mode change now calls `mgm_clear_stuck_middle_state()` first (forces disable + device cycle + ydotool releases).
+- Watchers use longer sleeps (1.2s for focus, 1.5s for process) to reduce mid-input toggles.
+- Device is always explicitly re-enabled after changes.
+- `kcminputrc` edits now back themselves up.
+
+**Tips to avoid it:**
+- Release mouse buttons before alt-tabbing or before launch/exit transitions complete.
+- For Star Citizen, the process watcher (in launch scripts) keeps game mode while the exe runs. If you alt-tab a lot, prefer running `mouse-game-mode focus` instead (or after launching).
+- In HDR/gamescope, window detection can be noisy — the focus watcher tries to handle the "Xwayland Video Bridge", but add patterns if needed.
+
+### Other common issues
 - After reboot or manual changes in System Settings, run `mouse-game-mode desktop`.
 - `mouse-game-mode list` shows live KWin state vs what kcminputrc has.
 - In HDR/gamescope the window titles/pids can be weird (bridge). Use `wmctrl -l`, `xprop`, and logs.
 - Focus watcher not detecting your game when tabbing? Add patterns (including bridge names for HDR), check with `wmctrl -l -p` while focused, or look at `/tmp/mouse-focus-watchdog.log`. You can also run `mouse-game-mode game` manually right after tabbing in.
-- Clicks broken? `mouse-emergency-reset.sh` or `mouse-game-mode desktop`.
+- Clicks broken / stuck in middle emulation? Use `mouse-fix-stuck-state.sh` (the strong one with ydotool releases) first, then `mouse-emergency-reset.sh`. Both are in `bin/`.
 - Multiple mice? The scripts target discovered pointer devices (currently Corsair-filtered in discovery; easy to generalize).
 - Logs: `/tmp/mouse-game-mode.log`, `/tmp/mouse-focus-watchdog.log`
 

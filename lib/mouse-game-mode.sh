@@ -1,21 +1,10 @@
 #!/usr/bin/env bash
-#
-# KDE Plasma Mouse Game Mode - Core Library
-#
-# This is free and open source software.
-# Feel free to read, edit, improve, fork, and redistribute these scripts.
-# Contributions and modifications are encouraged!
-#
-# Shared KDE Plasma mouse game-mode helpers.
+# Shared KDE Plasma mouse game-mode helpers for Corsair mice.
 # Toggles scrollOnButtonDown (hold middle button scrolls) and middleEmulation (L+R emulates middle click).
 # Desktop mode: both enabled for normal scrolling (L+R and hold-middle).
 # Game mode: both disabled (prevents unwanted scroll/middle emulation in games).
-#
-# Supports two watcher styles:
-#   - Focus-based (mouse-focus-watchdog): switches on window focus. Perfect for alt-tabbing in/out.
-#   - Process-based (mgm_start_game_watcher): tied to exe lifetime. Good for launch/close.
-# Works on Wayland with KWin. Tested primarily with Corsair mice but extensible.
-# Ideal for games like Star Citizen, FFXIV, etc. — disable emulation/scroll while in game.
+# For Star Citizen: launcher phase uses desktop settings (RSI Launcher isn't "the game").
+# Watcher only switches to game mode on actual StarCitizen.exe process (not launcher).
 
 MGM_QDBUS="${MGM_QDBUS:-$(command -v qdbus6 2>/dev/null || command -v qdbus)}"
 MGM_LOGFILE="${MGM_LOGFILE:-/tmp/mouse-game-mode.log}"
@@ -42,6 +31,7 @@ mgm_device_set() {
     for attempt in 1 2 3; do
         "$MGM_QDBUS" org.kde.KWin "$dev" org.freedesktop.DBus.Properties.Set \
             org.kde.KWin.InputDevice "$prop" "$value" 2>/dev/null || true
+        sleep 0.2
         actual=$(mgm_device_prop "$dev" "$prop")
         if [ "$actual" = "$value" ]; then
             return 0
@@ -53,8 +43,7 @@ mgm_device_set() {
     return 1
 }
 
-# True when this KWin node looks like a primary gaming mouse (tuned for Corsair).
-# Edit this function or mgm_discover_corsair_mice to support other mice/vendors.
+# True when this KWin node is a Corsair primary mouse (not keyboard/consumer side channels).
 mgm_is_corsair_mouse_name() {
     local name="$1"
     echo "$name" | grep -qi 'corsair' || return 1
@@ -91,6 +80,7 @@ mgm_set_middle_emulation() {
     for dev in $(mgm_discover_corsair_mice); do
         name=$(mgm_device_prop "$dev" name)
         mgm_device_set "$dev" middleEmulation "$enabled"
+        mgm_device_set "$dev" enabled true
         mgm_log "$label: $dev ($name)"
         count=$((count + 1))
     done
@@ -105,6 +95,7 @@ mgm_apply_scroll_mode() {
     for dev in $(mgm_discover_corsair_mice); do
         name=$(mgm_device_prop "$dev" name)
         mgm_device_set "$dev" scrollOnButtonDown "$scroll"
+        mgm_device_set "$dev" enabled true
         mgm_log "$label: $dev ($name) → scrollOnButtonDown=$scroll"
         count=$((count + 1))
     done
@@ -116,7 +107,26 @@ mgm_apply_scroll_mode() {
     return 0
 }
 
+# Force-clear any stuck middle button state before toggling modes.
+# This helps prevent the "stuck to middle mousing" desync in libinput
+# when a toggle happens while buttons are pressed or during game transitions.
+mgm_clear_stuck_middle_state() {
+    for dev in $(mgm_discover_corsair_mice); do
+        mgm_device_set "$dev" middleEmulation false
+        mgm_device_set "$dev" scrollOnButtonDown false
+        mgm_device_set "$dev" enabled false
+        sleep 0.4
+        mgm_device_set "$dev" enabled true
+    done
+    # Try to inject releases via ydotool if available (bypasses some state)
+    if [ -S /tmp/.ydotool_socket ] && command -v ydotool >/dev/null 2>&1; then
+        YDOTOOL_SOCKET=/tmp/.ydotool_socket ydotool key 272:0 273:0 274:0 2>/dev/null || true
+        sleep 0.2
+    fi
+}
+
 mgm_set_desktop_mode() {
+    mgm_clear_stuck_middle_state
     mgm_set_global_middle_button_scroll true
     mgm_set_global_emulate_middle_button true
     mgm_persist_libinput_middle_emulation true
@@ -125,6 +135,7 @@ mgm_set_desktop_mode() {
 }
 
 mgm_set_game_mode() {
+    mgm_clear_stuck_middle_state
     mgm_set_global_middle_button_scroll false
     mgm_set_global_emulate_middle_button false
     mgm_persist_libinput_middle_emulation false
@@ -148,11 +159,14 @@ mgm_set_global_emulate_middle_button() {
 mgm_persist_libinput_middle_emulation() {
     local enabled="$1"
     local val=$([ "$enabled" = true ] && echo true || echo false)
-    # Update all Corsair Mouse sections (case insensitive-ish for name)
+    # Safer edit with backup to avoid corrupting kcminputrc on repeated toggles
+    cp ~/.config/kcminputrc ~/.config/kcminputrc.bak 2>/dev/null || true
+    # Update all Corsair Mouse sections
     sed -i '/\[Libinput\]\[[0-9]*\]\[[0-9]*\]\[.*[Cc]orsair.*[Mm]ouse\]/,/^\[/ s/MiddleButtonEmulation=[^ ]*/MiddleButtonEmulation='"$val"'/' ~/.config/kcminputrc 2>/dev/null || true
 }
 
 # Emergency: safe click state for desktop use right now.
+# Call this if mouse becomes unresponsive after toggles.
 mgm_reset_safe() {
     mgm_log "RESET SAFE"
     mgm_set_global_middle_button_scroll true
@@ -162,6 +176,7 @@ mgm_reset_safe() {
     for dev in $(mgm_discover_corsair_mice); do
         name=$(mgm_device_prop "$dev" name)
         mgm_device_set "$dev" scrollOnButtonDown true
+        mgm_device_set "$dev" enabled true
         mgm_log "SAFE: $dev ($name) → scrollOnButtonDown=true"
     done
 }
@@ -234,7 +249,7 @@ mgm_start_game_watcher() {
                     mgm_log "WATCHER: $pattern gone (${off_debounce}s) — desktop mode ON"
                 fi
             fi
-            sleep 1
+            sleep 1.5
         done
     ) &
 
